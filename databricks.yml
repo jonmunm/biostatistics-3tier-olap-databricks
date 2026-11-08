@@ -1,0 +1,24 @@
+bundle:
+  name: biostatistics_discharges
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: "Catálogo de Unity Catalog donde se guardan las tablas"
+    default: "lab"
+  schema:
+    description: "Esquema dentro del catálogo"
+    default: "biostatistics"
+
+targets:
+  dev:
+    mode: development
+    default: true
+
+  prod:
+    mode: production
+    variables:
+      catalog: "lab"
+      schema: "biostatistics"

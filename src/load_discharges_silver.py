@@ -8,6 +8,12 @@ import sys
 import os
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
+from pathlib import Path
+
+CURRENT_DIR = str(Path().resolve())
+if CURRENT_DIR not in sys.path:
+    sys.path.insert(0, CURRENT_DIR)
+
 from lib import discharges_silver_loader as silver_loader
 
 def process() -> DataFrame:

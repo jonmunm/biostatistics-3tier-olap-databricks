@@ -4,10 +4,18 @@ year groups, standardizing schemas, unioning datasets, and persisting them as a 
 Delta table in Unity Catalog.
 """
 
+import os
+import sys
 from functools import reduce
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.types import IntegerType
+from pathlib import Path
+
+CURRENT_DIR = str(Path().resolve())
+if CURRENT_DIR not in sys.path:
+    sys.path.insert(0, CURRENT_DIR)
+
 from lib import discharges_raw_loader as raw_loader
 
 def process() -> DataFrame:

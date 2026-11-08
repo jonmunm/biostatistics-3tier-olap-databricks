@@ -1,0 +1,34 @@
+resources:
+  jobs:
+    discharges_job:
+      name: "Biostatistics Discharges Job"
+      performance_target: PERFORMANCE_OPTIMIZED
+
+      tasks:
+        # 1. Ingesta Raw (Bronze)
+        - task_key: Load_Raw
+          spark_python_task:
+            python_file: ../src/load_discharges_raw.py
+          environment_key: default_python_env
+
+        # 3. Transformación Silver
+        - task_key: Load_Silver
+          depends_on:
+            - task_key: Load_Raw
+          spark_python_task:
+            python_file: ../src/load_discharges_silver.py
+          environment_key: default_python_env
+
+        # 5. Transformación Gold (Modelo Estrella)
+        - task_key: Load_Gold
+          depends_on:
+            - task_key: Load_Silver
+          spark_python_task:
+            python_file: ../src/load_discharges_gold.py
+          environment_key: default_python_env
+
+      # Definición de entornos Serverless para las tareas del Job
+      environments:
+        - environment_key: default_python_env
+          spec:
+            client: "1"
