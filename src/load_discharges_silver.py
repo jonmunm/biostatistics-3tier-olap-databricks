@@ -47,6 +47,10 @@ def silver_discharges() -> DataFrame:
         silver_loader.fill_null_integers("healthcare_service"),
         silver_loader.clean_text("cause_of_death_1", default="N/E"),
         silver_loader.clean_text("cause_of_death_2", default="N/E")
+    )\
+    .filter(
+        (F.col("year").isNotNull()) & 
+        (F.col("year") > F.lit(2000))
     )
 
     final_df = transformed_df.withColumn(
