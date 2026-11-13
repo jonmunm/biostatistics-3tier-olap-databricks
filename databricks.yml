@@ -6,10 +6,10 @@ include:
 
 variables:
   catalog:
-    description: "Catálogo de Unity Catalog donde se guardan las tablas"
+    description: "Unity Catalog catalog where tables are stored"
     default: "lab"
   schema:
-    description: "Esquema dentro del catálogo"
+    description: "Schema within the catalog"
     default: "biostatistics"
 
 targets:

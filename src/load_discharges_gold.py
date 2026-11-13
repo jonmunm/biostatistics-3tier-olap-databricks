@@ -1,84 +1,75 @@
 """
-Delta Live Tables (DLT) module for transforming silver health discharge data into the gold tier,
+Task for transforming silver health discharge data into the gold tier,
 performing dimension lookups from ADLS Gen2 (via Unity Catalog External Location), recoding 
 causes of death, validating city CUTs, and materializing the final Gold fact table.
 """
 
+import sys
+import argparse
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.types import IntegerType
+from lib.storage_utils import download_dimension
 
-STORAGE_ACCOUNT = "storagesa01"
-STORAGE_CONTAINER = "biostatistics"
-DIMENSIONS_BASE_PATH = f"wasbs://{STORAGE_CONTAINER}@{STORAGE_ACCOUNT}.blob.core.windows.net/raw/dimensions/"
-
-def read_dimension_csv(filename: str) -> DataFrame:
-    """
-    Helper function to read dimension and lookup CSV files from the External Location
-    using the active SparkSession provided by the DLT runtime.
-    """
-    spark = SparkSession.getActiveSession()
-    return (
-        spark.read
-        .option("header", "true")
-        .option("sep", ";")
-        .csv(f"{DIMENSIONS_BASE_PATH}/{filename}")
-    )
-
-def process() -> DataFrame:
+def process(input_table: str, output_table: str, skip_validation: str = "false") -> DataFrame:
     """
     Reads the `silver_discharges` DLT table and joins it with dimension lookup CSVs 
     to produce the final star-schema fact table.
     """
+    if skip_validation.lower() == "true":
+        print("⏭️ Skipping Gold transformation step as requested.")
+        return None
 
-    dim_gender_df = read_dimension_csv("dim_gender.csv").select(
+    spark = SparkSession.builder.getOrCreate()
+
+    dim_gender_df = download_dimension("dim_gender").select(
         F.col("id").cast(IntegerType()).alias("id")
     )
 
-    dim_age_df = read_dimension_csv("dim_age.csv").select(
+    dim_age_df = download_dimension("dim_age").select(
         (F.col("age_id").cast(IntegerType()) + 1).alias("real_age"),
         F.col("id").cast(IntegerType()).alias("age_id")
     )
 
-    dim_year_df = read_dimension_csv("dim_year.csv").select(
+    dim_year_df = download_dimension("dim_year").select(
         (F.col("id").cast(IntegerType()) + 1989).alias("real_year"),
         F.col("id").cast(IntegerType()).alias("year_id")
     )
 
-    dim_health_insurance_df = read_dimension_csv("dim_health_insurance.csv").select(
+    dim_health_insurance_df = download_dimension("dim_health_insurance").select(
         F.col("id").cast(IntegerType()).alias("health_insurance_id"),
         F.col("health_insurance_code").cast(IntegerType()).alias("health_insurance_code"),
         F.col("valid_from").cast(IntegerType()).alias("valid_from"),
         F.col("valid_to").cast(IntegerType()).alias("valid_to")
     )
 
-    dim_healthcare_service_df = read_dimension_csv("dim_healthcare_service.csv").select(
+    dim_healthcare_service_df = download_dimension("dim_healthcare_service").select(
         F.col("id").cast(IntegerType()).alias("healthcare_service_id"),
         F.col("healthcare_service_cut").cast(IntegerType()).alias("healthcare_service_cut"),
         F.col("valid_from").cast(IntegerType()).alias("valid_from"),
         F.col("valid_to").cast(IntegerType()).alias("valid_to")
     )
 
-    dim_city_df = read_dimension_csv("dim_city.csv").select(
+    dim_city_df = download_dimension("dim_city").select(
         F.col("id").cast(IntegerType()).alias("city_id"),
         F.col("city_cut").cast(IntegerType()).alias("city_cut"),
         F.col("valid_from").cast(IntegerType()).alias("valid_from"),
         F.col("valid_to").cast(IntegerType()).alias("valid_to")
     )
 
-    cod_recod_df = read_dimension_csv("cause_of_death.recoded.lookup.csv")
+    cod_recod_df = download_dimension("cause_of_death.recoded.lookup")
 
-    dim_cause_of_death_df = read_dimension_csv("dim_cause_of_death.csv").select(
+    dim_cause_of_death_df = download_dimension("dim_cause_of_death").select(
         F.col("id").cast(IntegerType()).alias("id"),
         F.col("subcategory_code")
     )
 
-    invalid_cuts_df = read_dimension_csv("city.invalid_cuts.lookup.csv").select(
+    invalid_cuts_df = download_dimension("city.invalid_cuts.lookup").select(
         F.col("CUT").cast(IntegerType()).alias("CUT")
     )
 
     discharges_df = (
-        spark.read.table("lab.biostatistics.discharges_silver")
+        spark.read.table(input_table)
         .join(F.broadcast(dim_gender_df), F.col("gender") == F.col("id"), how="left")
         .join(F.broadcast(dim_year_df), F.col("year") == F.col("real_year"), how="left")
         .join(F.broadcast(dim_age_df), F.col("age") == F.col("real_age"), how="left")
@@ -193,7 +184,23 @@ def process() -> DataFrame:
         )
     )
 
-    discharges_df.write.mode("overwrite").saveAsTable("lab.biostatistics.discharges_gold")
+    discharges_df.write.mode("overwrite").saveAsTable(output_table)
+    return discharges_df
 
 if __name__ == "__main__":
-    process()
+    parser = argparse.ArgumentParser(description="Gold Transformation for hospital discharges")
+    parser.add_argument("--input-source", required=True, help="UC table name for Silver tier input")
+    parser.add_argument("--output-source", required=True, help="UC table name for Gold tier output")
+    parser.add_argument("--skip-validation", default="false", help="Set to true to skip this step")
+    args = parser.parse_args()
+
+    try:
+        process(
+            input_table=args.input_source,
+            output_table=args.output_source,
+            skip_validation=args.skip_validation
+        )
+        print("✅ Success! Gold transformation completed.")
+    except Exception as e:
+        print(f"Unexpected error in the Gold transformation pipeline: {str(e)}")
+        sys.exit(1)

@@ -1,10 +1,10 @@
 """
-Delta Live Tables (DLT) module for extracting raw health discharge data across multiple 
+Task for extracting raw health discharge data across multiple 
 year groups, standardizing schemas, unioning datasets, and persisting them as a managed 
 Delta table in Unity Catalog.
 """
 
-import os
+import argparse
 import sys
 from functools import reduce
 from pyspark.sql import DataFrame
@@ -18,11 +18,14 @@ if CURRENT_DIR not in sys.path:
 
 from lib import discharges_raw_loader as raw_loader
 
-def process() -> DataFrame:
+def process(skip_validation: str = "false") -> DataFrame:
     """
     Loads and standardizes schemas for all seven historical discharge groups and returns 
     a single unified DataFrame for DLT to materialize in Unity Catalog.
     """
+    if skip_validation.lower() == "true":
+        print("⏭️ Skipping Raw Loading step as requested.")
+        return None
 
     group_1_df = raw_loader.load_group_1().select(
         F.col("fecha_egre").alias("date"),
@@ -116,4 +119,15 @@ def process() -> DataFrame:
     complete_df.write.mode("overwrite").saveAsTable("lab.biostatistics.discharges_raw")
 
 if __name__ == "__main__":
-    process()
+    parser = argparse.ArgumentParser(description="Raw Loading for hospital discharges")
+    parser.add_argument("--skip-validation", default="false", help="Set to true to skip this step")
+    args = parser.parse_args()
+
+    try:
+        process(args.skip_validation)
+    except AssertionError as e:
+        print(str(e))
+        sys.exit(1) # Explicitly fails the Databricks Job
+    except Exception as e:
+        print(f"Unexpected error in the pipeline: {str(e)}")
+        sys.exit(1)

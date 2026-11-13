@@ -5,32 +5,8 @@ across various chronological schemas and year groupings.
 
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType
-
-STORAGE_ACCOUNT = "storagesa01"
-STORAGE_CONTAINER = "biostatistics"
+from lib.storage_utils import download_raw_years
     
-def download(schema: StructType, years: list) -> DataFrame:
-    """
-    Downloads and reads raw CSV discharge files from Azure Blob Storage 
-    for a specified list of years using a given Spark schema.
-
-    :param spark: Active SparkSession instance.
-    :param schema: PySpark StructType defining the schema for the target years.
-    :param years: List of year integers corresponding to the files to download.
-    :return: A DataFrame containing the loaded raw data.
-    """
-    spark = SparkSession.getActiveSession()
-    file_paths = [
-        f"abfss://{STORAGE_CONTAINER}@{STORAGE_ACCOUNT}.dfs.core.windows.net/raw/discharges/{year}.csv" 
-        for year in years
-    ]
-
-    return spark.read \
-        .format("csv") \
-        .option("header", "true") \
-        .option("sep", ";") \
-        .schema(schema) \
-        .load(file_paths)
 
 # 2001, 2003 -> "M/d/yyyy"
 # 2002, 2004 -> "dd-M-yyyy"
@@ -61,7 +37,7 @@ def load_group_1() -> DataFrame:
     ])
     
     years = [2001, 2002, 2003, 2004, 2006]
-    return download(schema, years)
+    return download_raw_years(schema, years)
 
 
 # 2005 -> "yyyy-MM-dd"
@@ -91,7 +67,7 @@ def load_group_2() -> DataFrame:
     ])
 
     years = [2005]
-    return download(schema, years)
+    return download_raw_years(schema, years)
 
 # 2007, 2009, 2011, 2012
 def load_group_3() -> DataFrame:
@@ -121,7 +97,7 @@ def load_group_3() -> DataFrame:
     ])
 
     years = [2007, 2009, 2011, 2012]
-    return download(schema, years)
+    return download_raw_years(schema, years)
 
 
 # 2008
@@ -152,7 +128,7 @@ def load_group_4() -> DataFrame:
     ])
 
     years = [2008]
-    return download(schema, years)
+    return download_raw_years(schema, years)
 
 
 # 2010
@@ -183,7 +159,7 @@ def load_group_5() -> DataFrame:
     ])
 
     years = [2010]
-    return download(schema, years)
+    return download_raw_years(schema, years)
 
 
 # 2013
@@ -213,7 +189,7 @@ def load_group_6() -> DataFrame:
     ])
 
     years = [2013]
-    return download(schema, years)
+    return download_raw_years(schema, years)
 
 
 # 2014, 2015, 2016, 2017, 2018
@@ -244,4 +220,4 @@ def load_group_7() -> DataFrame:
     ])
 
     years = [2014, 2015, 2016, 2017, 2018]
-    return download(schema, years)
+    return download_raw_years(schema, years)
