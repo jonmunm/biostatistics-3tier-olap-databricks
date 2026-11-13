@@ -1,31 +1,28 @@
 """
-Task for extracting raw health discharge data across multiple 
+Delta Live Tables (DLT) module for extracting raw health discharge data across multiple 
 year groups, standardizing schemas, unioning datasets, and persisting them as a managed 
 Delta table in Unity Catalog.
 """
 
-import argparse
-import sys
+import dlt
 from functools import reduce
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
-from pyspark.sql.types import IntegerType
-from pathlib import Path
-
-CURRENT_DIR = str(Path().resolve())
-if CURRENT_DIR not in sys.path:
-    sys.path.insert(0, CURRENT_DIR)
-
 from lib import discharges_raw_loader as raw_loader
 
-def process(skip_validation: str = "false") -> DataFrame:
+@dlt.table(
+    name="discharges_raw_dlt",
+    comment="Unified and standardized hospital discharge table (2001-2018).",
+    table_properties={
+        "quality": "bronze",
+        "pipelines.autoOptimize.managed": "true"
+    }
+)
+def uniformed_discharges() -> DataFrame:
     """
     Loads and standardizes schemas for all seven historical discharge groups and returns 
     a single unified DataFrame for DLT to materialize in Unity Catalog.
     """
-    if skip_validation.lower() == "true":
-        print("⏭️ Skipping Raw Loading step as requested.")
-        return None
 
     group_1_df = raw_loader.load_group_1().select(
         F.col("fecha_egre").alias("date"),
@@ -116,18 +113,5 @@ def process(skip_validation: str = "false") -> DataFrame:
         group_5_df, group_6_df, group_7_df
     ]
     complete_df = reduce(lambda df1, df2: df1.unionByName(df2), dfs)
-    complete_df.write.mode("overwrite").saveAsTable("lab.biostatistics.discharges_raw")
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Raw Loading for hospital discharges")
-    parser.add_argument("--skip-validation", default="false", help="Set to true to skip this step")
-    args = parser.parse_args()
-
-    try:
-        process(args.skip_validation)
-    except AssertionError as e:
-        print(str(e))
-        sys.exit(1) # Explicitly fails the Databricks Job
-    except Exception as e:
-        print(f"Unexpected error in the pipeline: {str(e)}")
-        sys.exit(1)
+    return complete_df

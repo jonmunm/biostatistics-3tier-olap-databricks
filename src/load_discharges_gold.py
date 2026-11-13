@@ -1,26 +1,28 @@
 """
-Task for transforming silver health discharge data into the gold tier,
+Delta Live Tables (DLT) module for transforming silver health discharge data into the gold tier,
 performing dimension lookups from ADLS Gen2 (via Unity Catalog External Location), recoding 
 causes of death, validating city CUTs, and materializing the final Gold fact table.
 """
 
-import sys
-import argparse
+import dlt
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.types import IntegerType
 from lib.storage_utils import download_dimension
 
-def process(input_table: str, output_table: str, skip_validation: str = "false") -> DataFrame:
+@dlt.table(
+    name="discharges_gold_dlt",
+    comment="Tabla de hechos (Gold) de egresos hospitalarios con llaves subrogadas de dimensiones",
+    table_properties={
+        "quality": "gold",
+        "pipelines.autoOptimize.managed": "true"
+    }
+)
+def gold_discharges() -> DataFrame:
     """
     Reads the `silver_discharges` DLT table and joins it with dimension lookup CSVs 
     to produce the final star-schema fact table.
     """
-    if skip_validation.lower() == "true":
-        print("⏭️ Skipping Gold transformation step as requested.")
-        return None
-
-    spark = SparkSession.builder.getOrCreate()
 
     dim_gender_df = download_dimension("dim_gender").select(
         F.col("id").cast(IntegerType()).alias("id")
@@ -69,7 +71,7 @@ def process(input_table: str, output_table: str, skip_validation: str = "false")
     )
 
     discharges_df = (
-        spark.read.table(input_table)
+        dlt.read("discharges_silver_dlt")
         .join(F.broadcast(dim_gender_df), F.col("gender") == F.col("id"), how="left")
         .join(F.broadcast(dim_year_df), F.col("year") == F.col("real_year"), how="left")
         .join(F.broadcast(dim_age_df), F.col("age") == F.col("real_age"), how="left")
@@ -184,23 +186,4 @@ def process(input_table: str, output_table: str, skip_validation: str = "false")
         )
     )
 
-    discharges_df.write.mode("overwrite").saveAsTable(output_table)
     return discharges_df
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Gold Transformation for hospital discharges")
-    parser.add_argument("--input-source", required=True, help="UC table name for Silver tier input")
-    parser.add_argument("--output-source", required=True, help="UC table name for Gold tier output")
-    parser.add_argument("--skip-validation", default="false", help="Set to true to skip this step")
-    args = parser.parse_args()
-
-    try:
-        process(
-            input_table=args.input_source,
-            output_table=args.output_source,
-            skip_validation=args.skip_validation
-        )
-        print("✅ Success! Gold transformation completed.")
-    except Exception as e:
-        print(f"Unexpected error in the Gold transformation pipeline: {str(e)}")
-        sys.exit(1)

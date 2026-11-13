@@ -1,0 +1,20 @@
+resources:
+  pipelines:
+    discharges_dlt_pipeline:
+      name: "Biostatistics Discharges DLT Pipeline"
+      target: "${var.SCHEMA}"
+      catalog: "${var.CATALOG}"
+
+      libraries:
+        - file:
+            path: ../src/load_discharges_raw.py
+        - file:
+            path: ../src/load_discharges_silver.py
+        - file:
+            path: ../src/load_discharges_gold.py
+
+      configuration:
+        STORAGE_ACCOUNT: "${var.STORAGE_ACCOUNT}"
+        STORAGE_CONTAINER: "${var.STORAGE_CONTAINER}"
+
+      serverless: true

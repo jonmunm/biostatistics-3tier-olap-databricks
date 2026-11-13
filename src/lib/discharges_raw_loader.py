@@ -3,7 +3,7 @@ Spark module for loading raw health discharge datasets from cloud storage
 across various chronological schemas and year groupings.
 """
 
-from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql import DataFrame
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType
 from lib.storage_utils import download_raw_years
     

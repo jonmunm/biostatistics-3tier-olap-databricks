@@ -5,11 +5,17 @@ include:
   - resources/*.yml
 
 variables:
-  catalog:
+  CATALOG:
     description: "Unity Catalog catalog where tables are stored"
     default: "lab"
-  schema:
+  SCHEMA:
     description: "Schema within the catalog"
+    default: "biostatistics"
+  STORAGE_ACCOUNT:
+    description: "Azure Storage Account Name"
+    default: "storagesa01"
+  STORAGE_CONTAINER:
+    description: "Azure Storage Container Name"
     default: "biostatistics"
 
 targets:
@@ -20,5 +26,7 @@ targets:
   prod:
     mode: production
     variables:
-      catalog: "lab"
-      schema: "biostatistics"
+      CATALOG: "lab"
+      SCHEMA: "biostatistics"
+      STORAGE_ACCOUNT: "storagesa01"
+      STORAGE_CONTAINER: "biostatistics"
