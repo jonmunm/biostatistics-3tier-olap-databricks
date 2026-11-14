@@ -3,33 +3,22 @@ import argparse
 import great_expectations as gx
 from pyspark.sql import SparkSession
 
-def validate_uniformed_discharges(input_source: str, skip_validation: str = "false"):
-    """
-    Initializes an ephemeral Great Expectations context in Databricks,
-    loads the data (from Unity Catalog or Volumes), executes quality validations
-    and handles errors by raising exceptions to fail the Databricks Job.
-    """
-    # 1. Retrieve the active Spark session in Databricks
+def validate_raw_discharges(input_source: str, skip_validation: str = "false"):
     if skip_validation.lower() == "true":
         print("⏭️ Skipping Raw validation step as requested.")
         return None
-
-    spark = SparkSession.builder.getOrCreate()
-    
-    # 2. Use an ephemeral (in-memory) context. Prevents disk errors on the cluster.
+  
     context = gx.get_context() 
+    spark = SparkSession.getActiveSession()
     
-    # 3. Read the data.
     if input_source.startswith("/Volumes/"):
         df = spark.read.parquet(input_source)
     else:
         df = spark.table(input_source)
 
-    # 4. Create the Datasource with persist=False to fix Serverless Compatibility
-    # This prevents the [CACHE_REQUIRES_NEWER_CLIENT_ON_SERVERLESS_GC] error
     datasource = context.data_sources.add_or_update_spark(
         name="spark_datasource",
-        persist=False  # <--- THE FIX IS HERE
+        persist=False
     )
     
     try:
@@ -44,7 +33,6 @@ def validate_uniformed_discharges(input_source: str, skip_validation: str = "fal
         expectation_suite=suite
     )
 
-    # Quality Rules
     columnas = ["date", "healthcare_service", "facility", "gender", "age", "city", "cause_of_death_1", "cause_of_death_2", "health_insurance"]
     validator.expect_table_columns_to_match_set(column_set=columnas)
 
@@ -63,23 +51,20 @@ def validate_uniformed_discharges(input_source: str, skip_validation: str = "fal
                 print(result.result)
                 print("\n")
 
-    # If it fails, the assert interrupts the script and marks the Job task as "Failed"
     assert results.success, "❌ Suite failed: The data did not pass the quality checks."
-    
     print("✅ Success! All checks passed.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="DQ for hospital discharges")
-    parser.add_argument("--input-source", required=True, help="UC table name or Volume path")
-    parser.add_argument("--skip-validation", default="false", help="Set to true to skip this step")
+    parser.add_argument("--input-source", default="lab.biostatistics.discharges_raw_dlt")
+    parser.add_argument("--skip-validation", default="false")
     args = parser.parse_args()
 
     try:
-        # AQUÍ ESTABA EL ERROR: Le faltaba el segundo parámetro (args.skip_validation)
-        validate_uniformed_discharges(args.input_source, args.skip_validation)
+        validate_raw_discharges(input_source=args.input_source, skip_validation=args.skip_validation)
     except AssertionError as e:
         print(str(e))
-        sys.exit(1) # Explicitly fails the Databricks Job
+        sys.exit(1)
     except Exception as e:
         print(f"Unexpected error in the pipeline: {str(e)}")
         sys.exit(1)

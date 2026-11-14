@@ -1,15 +1,8 @@
-"""
-Task for extracting raw health discharge data across multiple 
-year groups, standardizing schemas, unioning datasets, and persisting them as a managed 
-Delta table in Unity Catalog.
-"""
-
 import argparse
 import sys
 from functools import reduce
-from pyspark.sql import DataFrame
+from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
-from pyspark.sql.types import IntegerType
 from pathlib import Path
 
 CURRENT_DIR = str(Path().resolve())
@@ -17,15 +10,15 @@ if CURRENT_DIR not in sys.path:
     sys.path.insert(0, CURRENT_DIR)
 
 from lib import discharges_raw_loader as raw_loader
+from lib.storage_utils import set_storage_config
 
-def process(skip_validation: str = "false") -> DataFrame:
-    """
-    Loads and standardizes schemas for all seven historical discharge groups and returns 
-    a single unified DataFrame for DLT to materialize in Unity Catalog.
-    """
+def process(storage_account: str, storage_container: str, raw_table_fqdn: str, skip_validation: str = "false") -> DataFrame:
     if skip_validation.lower() == "true":
         print("⏭️ Skipping Raw Loading step as requested.")
         return None
+
+    # Configuramos el storage en memoria para evitar restricciones de Spark Connect
+    set_storage_config(storage_account, storage_container)
 
     group_1_df = raw_loader.load_group_1().select(
         F.col("fecha_egre").alias("date"),
@@ -115,19 +108,27 @@ def process(skip_validation: str = "false") -> DataFrame:
         group_1_df, group_2_df, group_3_df, group_4_df, 
         group_5_df, group_6_df, group_7_df
     ]
+
     complete_df = reduce(lambda df1, df2: df1.unionByName(df2), dfs)
-    complete_df.write.mode("overwrite").saveAsTable("lab.biostatistics.discharges_raw")
+    complete_df.write.mode("overwrite").saveAsTable(raw_table_fqdn)
+    return complete_df
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Raw Loading for hospital discharges")
-    parser.add_argument("--skip-validation", default="false", help="Set to true to skip this step")
+    parser.add_argument("--storage-account", default="storagesa01")
+    parser.add_argument("--storage-container", default="biostatistics")
+    parser.add_argument("--raw-table-fqdn", default="lab.biostatistics.discharges_raw_dlt")
+    parser.add_argument("--skip-validation", default="false")
     args = parser.parse_args()
 
     try:
-        process(args.skip_validation)
-    except AssertionError as e:
-        print(str(e))
-        sys.exit(1) # Explicitly fails the Databricks Job
+        process(
+            storage_account=args.storage_account,
+            storage_container=args.storage_container,
+            raw_table_fqdn=args.raw_table_fqdn,
+            skip_validation=args.skip_validation
+        )
+        print("✅ Success! Raw loading completed.")
     except Exception as e:
         print(f"Unexpected error in the pipeline: {str(e)}")
         sys.exit(1)

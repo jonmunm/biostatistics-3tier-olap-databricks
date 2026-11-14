@@ -1,22 +1,26 @@
 from pyspark.sql import SparkSession, DataFrame
-from pyspark.sql.types import StructType, StructField, StringType, IntegerType
+from pyspark.sql.types import StructType
 
-STORAGE_ACCOUNT = "storagesa01"
-STORAGE_CONTAINER = "biostatistics"
-    
+_config = {
+    "storage_account": "storagesa01",
+    "storage_container": "biostatistics"
+}
+
+def set_storage_config(storage_account: str, storage_container: str):
+    """Sets storage configuration in module memory to avoid Spark Connect spark.conf restrictions."""
+    _config["storage_account"] = storage_account
+    _config["storage_container"] = storage_container
+
 def download_raw_years(schema: StructType, years: list) -> DataFrame:
     """
     Downloads and reads raw CSV discharge files from Azure Blob Storage 
     for a specified list of years using a given Spark schema.
-
-    :param spark: Active SparkSession instance.
-    :param schema: PySpark StructType defining the schema for the target years.
-    :param years: List of year integers corresponding to the files to download.
-    :return: A DataFrame containing the loaded raw data.
     """
     spark = SparkSession.getActiveSession()
+    acc = _config["storage_account"]
+    cont = _config["storage_container"]
     file_paths = [
-        f"abfss://{STORAGE_CONTAINER}@{STORAGE_ACCOUNT}.dfs.core.windows.net/raw/discharges/{year}.csv" 
+        f"abfss://{cont}@{acc}.dfs.core.windows.net/raw/discharges/{year}.csv" 
         for year in years
     ]
 
@@ -32,7 +36,9 @@ def download_dimension(dim_name: str) -> DataFrame:
     Downloads a single dimension CSV file from Azure Blob Storage.
     """
     spark = SparkSession.getActiveSession()
-    file_path = f"abfss://{STORAGE_CONTAINER}@{STORAGE_ACCOUNT}.dfs.core.windows.net/raw/dimensions/{dim_name}.csv"
+    acc = _config["storage_account"]
+    cont = _config["storage_container"]
+    file_path = f"abfss://{cont}@{acc}.dfs.core.windows.net/raw/dimensions/{dim_name}.csv"
 
     return spark.read \
         .format("csv") \

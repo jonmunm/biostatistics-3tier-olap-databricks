@@ -81,3 +81,5 @@ To deploy the pipeline to the development environment using the Databricks CLI:
 databricks bundle deploy -t dev
 databricks bundle run discharges_job -t dev
 ```
+
+**[Delta Live Table (DLT) version can be found here](https://github.com/jonmunm/biostatistics-3tier-olap-databricks/tree/origin/dlt)**

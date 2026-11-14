@@ -11,6 +11,21 @@ variables:
   schema:
     description: "Schema within the catalog"
     default: "biostatistics"
+  raw_dlt_table_name:
+    description: "Raw DLT table name"
+    default: "discharges_raw_dlt"
+  silver_dlt_table_name:
+    description: "Silver DLT table name"
+    default: "discharges_silver_dlt"
+  gold_dlt_table_name:
+    description: "Gold DLT table name"
+    default: "discharges_gold_dlt"
+  storage_account:
+    description: "Azure Storage Account Name"
+    default: "storagesa01"
+  storage_container:
+    description: "Azure Storage Container Name"
+    default: "biostatistics"
 
 targets:
   dev:
@@ -22,3 +37,8 @@ targets:
     variables:
       catalog: "lab"
       schema: "biostatistics"
+      storage_account: "storagesa01"
+      storage_container: "biostatistics"
+      raw_dlt_table_name: "discharges_raw_dlt"
+      silver_dlt_table_name: "discharges_silver_dlt"
+      gold_dlt_table_name: "discharges_gold_dlt"

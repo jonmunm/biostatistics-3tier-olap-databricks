@@ -4,29 +4,18 @@ import great_expectations as gx
 from pyspark.sql import SparkSession
 
 def validate_silver_discharges(input_source: str, skip_validation: str = "false"):
-    """
-    Initializes an ephemeral Great Expectations context in Databricks,
-    loads the silver tier discharge dataset (from Unity Catalog or Volumes),
-    executes comprehensive data quality validations (nulls, types, ranges, regex),
-    and handles errors by raising exceptions to fail the Databricks Job.
-    """
     if skip_validation.lower() == "true":
         print("⏭️ Skipping Silver validation step as requested.")
         return None
         
-    # 1. Retrieve the active Spark session in Databricks
     spark = SparkSession.builder.getOrCreate()
-    
-    # 2. Use an ephemeral (in-memory) context. Prevents disk errors on the cluster.
     context = gx.get_context() 
     
-    # 3. Read the data.
     if input_source.startswith("/Volumes/"):
         df = spark.read.parquet(input_source)
     else:
         df = spark.table(input_source)
 
-    # 4. Create the Datasource with persist=False to fix Serverless Compatibility
     datasource = context.data_sources.add_or_update_spark(
         name="spark_datasource",
         persist=False
@@ -44,11 +33,9 @@ def validate_silver_discharges(input_source: str, skip_validation: str = "false"
         expectation_suite=suite
     )
 
-    # Schema
     columnas = ["year", "gender", "age", "health_insurance", "city", "healthcare_service", "cause_of_death_1", "cause_of_death_2"]
     validator.expect_table_columns_to_match_set(column_set=columnas)
 
-    # Nulls
     validator.expect_column_values_to_not_be_null("year")
     validator.expect_column_values_to_not_be_null("gender")
     validator.expect_column_values_to_not_be_null("age")
@@ -58,7 +45,6 @@ def validate_silver_discharges(input_source: str, skip_validation: str = "false"
     validator.expect_column_values_to_not_be_null("cause_of_death_1")
     validator.expect_column_values_to_not_be_null("cause_of_death_2")    
 
-    # Types
     validator.expect_column_values_to_be_of_type("year", "IntegerType")
     validator.expect_column_values_to_be_of_type("gender", "IntegerType")
     validator.expect_column_values_to_be_of_type("age", "IntegerType")
@@ -68,7 +54,6 @@ def validate_silver_discharges(input_source: str, skip_validation: str = "false"
     validator.expect_column_values_to_be_of_type("cause_of_death_1", "StringType")
     validator.expect_column_values_to_be_of_type("cause_of_death_2", "StringType")    
 
-    # Value Ranges
     validator.expect_column_values_to_be_between("year", min_value=2001, max_value=2018)
     validator.expect_column_values_to_be_in_set("gender", [1, 2, 3, 9])
     validator.expect_column_values_to_be_between("age", min_value=0, max_value=130)
@@ -76,15 +61,13 @@ def validate_silver_discharges(input_source: str, skip_validation: str = "false"
     validator.expect_column_values_to_be_between("city", min_value=0, max_value=999999)
     validator.expect_column_values_to_be_between("healthcare_service", min_value=0, max_value=999999)
 
-    # Regex for causes of death (ICD-10 patterns)
     partes = [
-        r"[A-Z][0-9]{3}", # Ejemplo: A123
-        r"[A-Z][0-9]{2}X", # Ejemplo: A12X
-        r"[A-Z][0-9]{2,4}", # Ejemplo: A12, A1234
-        r"[A-Z][0-9]{3}\+", # Ejemplo: A123+
+        r"[A-Z][0-9]{3}",
+        r"[A-Z][0-9]{2}X",
+        r"[A-Z][0-9]{2,4}",
+        r"[A-Z][0-9]{3}\+",
         r"N/E"
     ]
-
     regex = r"^(" + "|".join(partes) + r")$"
     validator.expect_column_values_to_match_regex("cause_of_death_1", regex=regex, mostly=0.99)
     validator.expect_column_values_to_match_regex("cause_of_death_2", regex=regex, mostly=0.74)
@@ -102,20 +85,19 @@ def validate_silver_discharges(input_source: str, skip_validation: str = "false"
                 print("\n")
 
     assert results.success, "❌ Suite failed: The Silver tier data did not pass the quality checks."
-    
     print("✅ Success! All Silver checks passed.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="DQ for Silver hospital discharges")
-    parser.add_argument("--input-source", required=True, help="UC table name or Volume path")
-    parser.add_argument("--skip-validation", default="false", help="Set to true to skip this step")
+    parser.add_argument("--input-source", default="lab.biostatistics.discharges_silver_dlt")
+    parser.add_argument("--skip-validation", default="false")
     args = parser.parse_args()
 
     try:
-        validate_silver_discharges(args.input_source, args.skip_validation)
+        validate_silver_discharges(input_source=args.input_source, skip_validation=args.skip_validation)
     except AssertionError as e:
         print(str(e))
-        sys.exit(1) # Explicitly fails the Databricks Job
+        sys.exit(1)
     except Exception as e:
         print(f"Unexpected error in the pipeline: {str(e)}")
         sys.exit(1)

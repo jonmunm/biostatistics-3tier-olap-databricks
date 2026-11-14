@@ -1,12 +1,12 @@
 """
 Task for transforming bronze health discharge data into the silver tier,
-including date parsing, null filling, data imputation, data quality expectations, and persisting 
+including date parsing, null filling, data imputation, and persisting 
 as a managed Delta table in Unity Catalog.
 """
 
 import sys
 import argparse
-from pyspark.sql import DataFrame
+from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
 from pathlib import Path
 
@@ -16,22 +16,22 @@ if CURRENT_DIR not in sys.path:
 
 from lib import discharges_silver_loader as silver_loader
 
-def process(skip_validation: str = "false") -> DataFrame:
+def process(raw_table_fqdn: str, silver_table_fqdn: str, skip_validation: str = "false") -> DataFrame:
     """
-    Reads the bronze `uniformed_discharges` table from the DLT pipeline, applies cleaning 
-    and imputation functions from `silver_loader`, adjusts 2018 health insurance codes, 
-    and returns the cleaned DataFrame.
+    Reads the bronze table, applies cleaning and imputation functions, and persists the cleaned DataFrame.
     """
     if skip_validation.lower() == "true":
         print("⏭️ Skipping Silver Loading step as requested.")
         return None
+
+    spark = SparkSession.getActiveSession()
 
     cols_to_load = [
         "date", "gender", "age", "health_insurance", "city", 
         "healthcare_service", "facility", "cause_of_death_1", "cause_of_death_2"
     ]
 
-    raw_df = spark.read.table("lab.biostatistics.discharges_raw").select(*cols_to_load)
+    raw_df = spark.read.table(raw_table_fqdn).select(*cols_to_load)
     raw_df = raw_df.filter(F.col("date").isNotNull() & (F.trim(F.col("date")) != ""))
 
     transformed_df = raw_df.select(
@@ -49,7 +49,6 @@ def process(skip_validation: str = "false") -> DataFrame:
         (F.col("year") > F.lit(2000))
     )\
     .withColumn(
-        # Ultima condicion
         "health_insurance",
         F.when(
             (F.col("year") == F.lit(2018)) &
@@ -58,18 +57,23 @@ def process(skip_validation: str = "false") -> DataFrame:
         ).otherwise(F.col("health_insurance"))
     )
 
-    transformed_df.write.mode("overwrite").saveAsTable("lab.biostatistics.discharges_silver")
+    transformed_df.write.mode("overwrite").saveAsTable(silver_table_fqdn)
+    return transformed_df
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Silver Loading for hospital discharges")
-    parser.add_argument("--skip-validation", default="false", help="Set to true to skip this step")
+    parser.add_argument("--raw-table-fqdn", default="lab.biostatistics.discharges_raw_dlt")
+    parser.add_argument("--silver-table-fqdn", default="lab.biostatistics.discharges_silver_dlt")
+    parser.add_argument("--skip-validation", default="false")
     args = parser.parse_args()
 
     try:
-        process(args.skip_validation)
-    except AssertionError as e:
-        print(str(e))
-        sys.exit(1) # Explicitly fails the Databricks Job
+        process(
+            raw_table_fqdn=args.raw_table_fqdn,
+            silver_table_fqdn=args.silver_table_fqdn,
+            skip_validation=args.skip_validation
+        )
+        print("✅ Success! Silver transformation completed.")
     except Exception as e:
         print(f"Unexpected error in the pipeline: {str(e)}")
         sys.exit(1)
